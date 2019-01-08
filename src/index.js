@@ -6,34 +6,25 @@ const {
   saveBills,
   log
 } = require('cozy-konnector-libs')
-const request = requestFactory({
-  // the debug mode shows all the details about http request and responses. Very useful for
-  // debugging but very verbose. That is why it is commented out by default
+let request = requestFactory()
+const j = request.jar()
+request = requestFactory({
   // debug: true,
-  // activates [cheerio](https://cheerio.js.org/) parsing on each page
-  cheerio: true,
-  // If cheerio is activated do not forget to deactivate json parsing (which is activated by
-  // default in cozy-konnector-libs
+  cheerio: false,
   json: false,
-  // this allows request-promise to keep cookies between requests
-  jar: true
+  jar: j
 })
-
-const baseUrl = 'http://books.toscrape.com'
 
 module.exports = new BaseKonnector(start)
 
-// The start function is run by the BaseKonnector instance only when it got all the account
-// information (fields). When you run this connector yourself in "standalone" mode or "dev" mode,
-// the account information come from ./konnector-dev-config.json file
 async function start(fields) {
   log('info', 'Authenticating ...')
   await authenticate(fields.login, fields.password)
   log('info', 'Successfully logged in')
-  // The BaseKonnector instance expects a Promise as return of the function
+  return
   log('info', 'Fetching the list of documents')
-  const $ = await request(`${baseUrl}/index.html`)
-  // cheerio (https://cheerio.js.org/) uses the same api as jQuery (http://jquery.com/)
+  //cheerio TODO
+  const $ = await request(`https://secure.fnac.com/MyAccount/Order`)
   log('info', 'Parsing list of documents')
   const documents = await parseDocuments($)
 
@@ -48,33 +39,39 @@ async function start(fields) {
   })
 }
 
-// this shows authentication using the [signin function](https://github.com/konnectors/libs/blob/master/packages/cozy-konnector-libs/docs/api.md#module_signin)
-// even if this in another domain here, but it works as an example
-function authenticate(username, password) {
-  return signin({
-    url: `http://quotes.toscrape.com/login`,
-    formSelector: 'form',
-    formData: { username, password },
-    // the validate function will check if the login request was a success. Every website has
-    // different ways respond: http status code, error message in html ($), http redirection
-    // (fullResponse.request.uri.href)...
-    validate: (statusCode, $, fullResponse) => {
-      log(
-        'debug',
-        fullResponse.request.uri.href,
-        'not used here but should be usefull for other connectors'
-      )
-      // The login in toscrape.com always works excepted when no password is set
-      if ($(`a[href='/logout']`).length === 1) {
-        return true
-      } else {
-        // cozy-konnector-libs has its own logging function which format these logs with colors in
-        // standalone and dev mode and as JSON in production mode
-        log('error', $('.error').text())
-        return false
-      }
+// Cookie .AUTH and cookie UID seems mandatory to be connected
+async function authenticate(username, password) {
+  // Prefecth environnement
+  await request('https://secure.fnac.com/identity/gateway/signin')
+  const authorize_request_identifier = j
+    .getCookies('https://secure.fnac.com')
+    .find(cookie => cookie.key === 'authorize_request_identifier').value
+  log('debug', 'First login step ok, get authorize_request_identifier')
+
+  // First POST to API to get an OpenID token
+  const reqPostApi = await request({
+    url: 'https://secure.fnac.com/identity/server/api/v1/login',
+    method: 'POST',
+    form: {
+      authenticationLocation: 'StandardCreation - Account',
+      authorizeRequestIdentifier: authorize_request_identifier,
+      email: username,
+      password: password,
+      redirectUri: ''
     }
   })
+  const OAuthUrl = JSON.parse(reqPostApi).RedirectUri
+  // LOGIN FAILED
+  log('info', 'Account seems valid')
+  log('debug', 'Second login step ok, get an Oauth link')
+
+  // Do a Oauth process with signin (GET then POST)
+  await signin({
+    url: OAuthUrl,
+    formSelector: 'form'
+  })
+  log('debug', 'Third login step ok, logged back to fnac.com')
+  return
 }
 
 // The goal of this function is to parse a html page wrapped by a cheerio instance
