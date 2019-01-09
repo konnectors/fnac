@@ -7,9 +7,9 @@ const {
   log
 } = require('cozy-konnector-libs')
 let request = requestFactory()
-const j = request.jar()
+let j = request.jar()
 request = requestFactory({
-  // debug: true,
+  debug: true,
   cheerio: false,
   json: false,
   jar: j
@@ -21,10 +21,11 @@ async function start(fields) {
   log('info', 'Authenticating ...')
   await authenticate(fields.login, fields.password)
   log('info', 'Successfully logged in')
-  return
+  //  await request('https://fnac.com')
   log('info', 'Fetching the list of documents')
   //cheerio TODO
   const $ = await request(`https://secure.fnac.com/MyAccount/Order`)
+  return
   log('info', 'Parsing list of documents')
   const documents = await parseDocuments($)
 
@@ -41,8 +42,25 @@ async function start(fields) {
 
 // Cookie .AUTH and cookie UID seems mandatory to be connected
 async function authenticate(username, password) {
-  // Prefecth environnement
-  await request('https://secure.fnac.com/identity/gateway/signin')
+  // Prefecth Oauth URL and token
+  let firstOauthUrl = ''
+  try {
+    const firstReq = await request({
+      followRedirect: false,
+      uri: 'https://secure.fnac.com/identity/gateway/signin',
+      followAllRedirects: false
+    })
+  } catch (err) {
+    if (err.statusCode === 302) {
+      firstOauthUrl = err.response.headers.location
+    } else {
+      throw err
+    }
+  }
+  console.log(firstOauthUrl)
+  // Finish to follow 302
+  await request(firstOauthUrl)
+
   const authorize_request_identifier = j
     .getCookies('https://secure.fnac.com')
     .find(cookie => cookie.key === 'authorize_request_identifier').value
@@ -52,25 +70,33 @@ async function authenticate(username, password) {
   const reqPostApi = await request({
     url: 'https://secure.fnac.com/identity/server/api/v1/login',
     method: 'POST',
+    headers: {
+      authorization: 'Basic 23A17F49D34DE16BC85AB395F' //not needed maybe
+    },
     form: {
       authenticationLocation: 'StandardCreation - Account',
       authorizeRequestIdentifier: authorize_request_identifier,
       email: username,
       password: password,
-      redirectUri: ''
+      redirectUri: firstOauthUrl
     }
   })
   const OAuthUrl = JSON.parse(reqPostApi).RedirectUri
+
   // LOGIN FAILED
   log('info', 'Account seems valid')
   log('debug', 'Second login step ok, get an Oauth link')
-
+  console.log(OAuthUrl)
   // Do a Oauth process with signin (GET then POST)
   await signin({
     url: OAuthUrl,
     formSelector: 'form'
   })
   log('debug', 'Third login step ok, logged back to fnac.com')
+
+  // What's BAD :
+  // .AUTH cookie not set at  complete-login
+  // Order page redirect to a login process
   return
 }
 
