@@ -2,8 +2,6 @@ const {
   BaseKonnector,
   requestFactory,
   signin,
-  scrape,
-  saveBills,
   log
 } = require('cozy-konnector-libs')
 let request = requestFactory()
@@ -11,33 +9,37 @@ let j = request.jar()
 request = requestFactory({
   debug: true,
   cheerio: false,
+  json: true,
+  jar: j,
+  headers: {
+    'User-Agent':
+      'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:65.0) Gecko/20100101 Firefox/65.0',
+    'Accept-Language': 'fr,fr-FR;q=0.8,en-US;q=0.5,en;q=0.3'
+  }
+})
+
+const requestHTML = requestFactory({
+  debug: true,
+  cheerio: true,
   json: false,
-  jar: j
+  jar: j,
+  headers: {
+    'User-Agent':
+      'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:65.0) Gecko/20100101 Firefox/65.0',
+    Accept:
+      'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    'Accept-Language': 'fr,fr-FR;q=0.8,en-US;q=0.5,en;q=0.3'
+  }
 })
 
 module.exports = new BaseKonnector(start)
 
 async function start(fields) {
   log('info', 'Authenticating ...')
+  await requestHTML('https://fnac.com')
   await authenticate(fields.login, fields.password)
-  log('info', 'Successfully logged in')
-  //  await request('https://fnac.com')
-  log('info', 'Fetching the list of documents')
-  //cheerio TODO
-  const $ = await request(`https://secure.fnac.com/MyAccount/Order`)
-  return
-  log('info', 'Parsing list of documents')
-  const documents = await parseDocuments($)
-
-  // here we use the saveBills function even if what we fetch are not bills, but this is the most
-  // common case in connectors
-  log('info', 'Saving data to Cozy')
-  await saveBills(documents, fields, {
-    // this is a bank identifier which will be used to link bills to bank operations. These
-    // identifiers should be at least a word found in the title of a bank operation related to this
-    // bill. It is not case sensitive.
-    identifiers: ['books']
-  })
+  const $ = await requestHTML(`https://secure.fnac.com/MyAccount/Order`)
+  global.openInBrowser($)
 }
 
 // Cookie .AUTH and cookie UID seems mandatory to be connected
@@ -45,7 +47,7 @@ async function authenticate(username, password) {
   // Prefecth Oauth URL and token
   let firstOauthUrl = ''
   try {
-    const firstReq = await request({
+    await request({
       followRedirect: false,
       uri: 'https://secure.fnac.com/identity/gateway/signin',
       followAllRedirects: false
@@ -57,7 +59,6 @@ async function authenticate(username, password) {
       throw err
     }
   }
-  console.log(firstOauthUrl)
   // Finish to follow 302
   await request(firstOauthUrl)
 
@@ -81,15 +82,15 @@ async function authenticate(username, password) {
       redirectUri: firstOauthUrl
     }
   })
-  const OAuthUrl = JSON.parse(reqPostApi).RedirectUri
+  const OAuthUrl = reqPostApi.RedirectUri
 
   // LOGIN FAILED
   log('info', 'Account seems valid')
   log('debug', 'Second login step ok, get an Oauth link')
-  console.log(OAuthUrl)
   // Do a Oauth process with signin (GET then POST)
   await signin({
     url: OAuthUrl,
+    requestInstance: requestHTML,
     formSelector: 'form'
   })
   log('debug', 'Third login step ok, logged back to fnac.com')
@@ -98,55 +99,4 @@ async function authenticate(username, password) {
   // .AUTH cookie not set at  complete-login
   // Order page redirect to a login process
   return
-}
-
-// The goal of this function is to parse a html page wrapped by a cheerio instance
-// and return an array of js objects which will be saved to the cozy by saveBills (https://github.com/konnectors/libs/blob/master/packages/cozy-konnector-libs/docs/api.md#savebills)
-function parseDocuments($) {
-  // you can find documentation about the scrape function here :
-  // https://github.com/konnectors/libs/blob/master/packages/cozy-konnector-libs/docs/api.md#scrape
-  const docs = scrape(
-    $,
-    {
-      title: {
-        sel: 'h3 a',
-        attr: 'title'
-      },
-      amount: {
-        sel: '.price_color',
-        parse: normalizePrice
-      },
-      fileurl: {
-        sel: 'img',
-        attr: 'src',
-        parse: src => `${baseUrl}/${src}`
-      },
-      filename: {
-        sel: 'h3 a',
-        attr: 'title',
-        parse: title => `${title}.jpg`
-      }
-    },
-    'article'
-  )
-  return docs.map(doc => ({
-    ...doc,
-    // the saveBills function needs a date field
-    // even if it is a little artificial here (these are not real bills)
-    date: new Date(),
-    currency: '€',
-    vendor: 'template',
-    metadata: {
-      // it can be interesting that we add the date of import. This is not mandatory but may be
-      // useful for debugging or data migration
-      importDate: new Date(),
-      // document version, useful for migration after change of document structure
-      version: 1
-    }
-  }))
-}
-
-// convert a price string to a float
-function normalizePrice(price) {
-  return parseFloat(price.replace('£', '').trim())
 }
