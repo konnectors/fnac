@@ -3,15 +3,17 @@
   "name": "Fnac",
   "type": "konnector",
   "language": "node",
-  "icon": "icon.png",
+  "icon": "icon.svg",
   "slug": "fnac",
   "source": "git://github.com/konnectors/fnac.git",
   "editor": "Cozy",
-  "vendor_link": "Link to the target website",
-  "categories": ["other"],
+  "vendor_link": "https://secure.fnac.com/identity/gateway/signin",
+  "categories": [
+    "shopping"
+  ],
   "fields": {
     "login": {
-      "type": "text"
+      "type": "email"
     },
     "password": {
       "type": "password"
@@ -38,8 +40,7 @@
       "type": "io.cozy.files"
     },
     "accounts": {
-      "type": "io.cozy.accounts",
-      "verbs": ["GET"]
+      "type": "io.cozy.accounts"
     }
   },
   "developer": {
@@ -49,8 +50,8 @@
   "langs": ["fr", "en"],
   "locales": {
     "fr": {
-      "short_description": "Template de connecteur",
-      "long_description": "Ce template récupère une liste de livres sur un site de scraping",
+      "short_description": "Récupère vos factures fnac",
+      "long_description": "Récupère vos factures fnac",
       "permissions": {
         "bank operations": {
           "description": "Utilisé pour relier les factures à des operations bancaires"
@@ -67,8 +68,8 @@
       }
     },
     "en": {
-      "short_description": "Connector template",
-      "long_description": "This template fetches a list of books from a scraping website",
+      "short_description": "Fetch your fnac bills",
+      "long_description": "Fetch your fnac bills",
       "permissions": {
         "bank operations": {
           "description": "Required to link bank operations to bills"
@@ -85,6 +86,6 @@
       }
     }
   },
-  "banksTransactionRegExp": "\\bbooks\\b",
+  "banksTransactionRegExp": "\\bfnac\\b",
   "manifest_version": "2"
 }
