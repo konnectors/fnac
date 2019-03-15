@@ -1,0 +1,41 @@
+language: node_js
+node_js:
+- '8'
+env:
+  global:
+  - GH_USER_EMAIL="travis@example.org"
+  - GH_USER_NAME="cozy-bot"
+  - DEPLOY_REPOSITORY="git@github.com:konnectors/fnac.git"
+  - secure: eJSmNze4OuJ4XLd40Qzjlk4zRK/7IyC/NuI/icGfaOyYZYhu/hKP7cRZRuM5KH5vyNqDSpMTGfzvIYMYnGIw50gYwysWhLqTOr84vmsv3YuJ2IyVV+2fHRP2QO8D2O7G5FvXKjZWEeyIUJg6LAMiPJdK26sBPC4k/M37VHqzL3lXpEokeVCVG0tNgjOvCj71H/b6ylM8/AbQnmRY+h2J8bk5m7jCoIvv/7wiqgxdhvAjx02ZuAxmTd3Hib0h0jqx8Inc1LvDvQ6nWaEB9x3mMSWgp9WJzxylGxb1i6fd5opseAei3IsYk8XGU6mBQ8ufQglO2xN4WAL0/fQ8wU4EaGQLUq9pIXEyzM7nZZ+4c4szSSOn18W6dmK4NBI6qoz8tgZXDdRukTvBVVAyyTvVqglAJTtZTn3dqOvdPYAaJ3wRS33m+k3oD250+gA3Pcvvs8VsGKxJzXL3gyjTgj9h4pHznf4IEmxJ4aeIgyTa0JzhMkP3rHel/+8uLSY7tMOmTE3M65W0VgdMmZliTPWCbHvrZnHPffg79tUCnpz55uo2AKEgLwLvrl30xuVRMxrj4Xbdr56n/NEJ9J1E5p+4PV4kqVVAGOdKTS9UMPX+SEQze/x6PCaJPayR47tP6hKXe6/hrXiLTubns6xWCdj9KnYfDk5KVbma9MsfHIr7IEA=
+cache:
+  yarn: true
+  directories:
+  - node_modules
+branches:
+  except:
+  - build
+  - build-debug
+script:
+- yarn lint
+- yarn build
+- yarn run check
+deploy:
+- provider: script
+  skip-cleanup: true
+  script: DEPLOY_BRANCH=build yarn deploy && yarn cozyPublish
+  on:
+    branch: master
+- provider: script
+  skip-cleanup: true
+  script: DEPLOY_BRANCH=build yarn deploy && yarn cozyPublish
+  on:
+    tags: true
+before_install:
+- openssl aes-256-cbc -K $encrypted_fb54136c0baa_key -iv $encrypted_fb54136c0baa_iv
+  -in github_deploy_key.enc -out /tmp/github_deploy_key -d
+- eval "$(ssh-agent -s)"
+- chmod 600 /tmp/github_deploy_key
+- ssh-add /tmp/github_deploy_key
+after_deploy:
+- rm /tmp/github_deploy_key
+- ssh-add -D
