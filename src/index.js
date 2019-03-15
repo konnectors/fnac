@@ -1,15 +1,10 @@
 const {
-  BaseKonnector,
-  requestFactory,
-  signin,
-  scrape,
+  CookieKonnector,
   log,
-  saveBills,
   utils,
+  scrape,
   errors
 } = require('cozy-konnector-libs')
-let request = requestFactory()
-let j = request.jar()
 const moment = require('moment')
 
 const headers = {
@@ -18,147 +13,167 @@ const headers = {
   'Accept-Language': 'fr,fr-FR;q=0.8,en-US;q=0.5,en;q=0.3'
 }
 
-request = requestFactory({
-  // debug: 'simple',
-  cheerio: false,
-  json: true,
-  jar: j,
-  headers
-})
-
-const requestHTML = requestFactory({
-  // debug: 'simple',
-  cheerio: true,
-  json: false,
-  jar: j,
-  headers
-})
-
-module.exports = new BaseKonnector(start)
-
-async function start(fields) {
-  await requestHTML('https://fnac.com')
-  log('info', 'Authenticating ...')
-  await authenticate(fields.login, fields.password)
-
-  const bills = formatBills(await fetchBills())
-
-  await saveBills(bills, fields.folderPath, {
-    requestInstance: requestHTML,
-    identifiers: ['fnac']
-  })
-}
-
-function formatBills(bills) {
-  const VENDOR = 'Fnac'
-  return bills.map(bill => ({
-    ...bill,
-    vendor: VENDOR,
-    currency: '€',
-    filename: `${utils.formatDate(bill.date)}_${VENDOR}_${bill.amount.toFixed(
-      2
-    )}€_${bill.vendorRef}.pdf`,
-    metadata: {
-      importDate: new Date(),
-      version: 1
-    }
-  }))
-}
-
-// Cookie .AUTH and cookie UID seems mandatory to be connected
-async function authenticate(username, password) {
-  // Prefecth Oauth URL and token
-  let firstOauthUrl = ''
-  try {
-    await request({
-      followRedirect: false,
-      uri: 'https://secure.fnac.com/identity/gateway/signin',
-      followAllRedirects: false
-    })
-  } catch (err) {
-    if (err.statusCode === 302) {
-      firstOauthUrl = err.response.headers.location
-    } else {
-      throw err
-    }
-  }
-  // Finish to follow 302
-  await request(firstOauthUrl)
-
-  const authorize_request_identifier = j
-    .getCookies('https://secure.fnac.com')
-    .find(cookie => cookie.key === 'authorize_request_identifier').value
-  log('debug', 'First login step ok, get authorize_request_identifier')
-
-  // First POST to API to get an OpenID token
-  try {
-    const reqPostApi = await request({
-      url: 'https://secure.fnac.com/identity/server/api/v1/login',
-      method: 'POST',
-      headers: {
-        authorization: 'Basic 23A17F49D34DE16BC85AB395F' //not needed maybe
-      },
-      form: {
-        authenticationLocation: 'StandardCreation - Account',
-        authorizeRequestIdentifier: authorize_request_identifier,
-        email: username,
-        password: password,
-        redirectUri: firstOauthUrl
+class FnacConnector extends CookieKonnector {
+  async testSession() {
+    try {
+      if (!this._jar._jar.toJSON().cookies.length) {
+        return false
       }
-    })
-    const OAuthUrl = reqPostApi.RedirectUri
-    log('info', 'Account seems valid')
-    log('debug', 'Second login step ok, get an Oauth link')
-    // Do a Oauth process with signin (GET then POST)
-    await signin({
-      url: OAuthUrl,
-      requestInstance: requestHTML,
-      formSelector: 'form'
-    })
-    log('debug', 'Third login step ok, logged back to fnac.com')
-  } catch (err) {
-    log('error', err.message)
-    throw new Error(errors.LOGIN_FAILED)
-  }
-}
-
-async function fetchBills() {
-  let result = []
-  for (const dateRangeType of [3, 4, 5, 6]) {
-    const $ = await requestHTML(
-      `https://secure.fnac.com/MyAccount/Order/GetOrders?DateRangeType=${dateRangeType}&OrderType=0`
-    )
-
-    const bills = scrape(
-      $,
-      {
-        vendorRef: {
-          sel: 'div',
-          fn: $el => $el.closest('section').data('order-id')
-        },
-        date: {
-          sel: '.ma-OrderTop>div>div>span:nth-child(1)',
-          parse: date => moment(date, 'DD/MM/YYYY').toDate()
-        },
-        amount: {
-          sel: '.ma-orderdetails-price, .ma-OrderDetails-price',
-          parse: normalizePrice
-        },
-        fileurl: {
-          sel: ".ma-OrderDetails-Link[href^='javascript']",
-          attr: 'href',
-          parse: href => href && href.match(/(https.*)'\)$/)[1]
+      log('info', 'Testing session')
+      await this.requestHtml('https://fnac.com')
+      await this.requestHtml(
+        `https://secure.fnac.com/MyAccount/Order/GetOrders?DateRangeType=${2}&OrderType=0`,
+        {
+          followRedirect: false,
+          followAllRedirects: false
         }
-      },
-      '.ma-Order'
-    )
-
-    result = result.concat(bills)
+      )
+      log('info', 'Session is OK')
+      return true
+    } catch (err) {
+      log('warn', err.message)
+      log('warn', 'Session failed')
+      return false
+    }
   }
 
-  result = result.filter(bill => bill.fileurl)
+  async fetch(fields) {
+    this.initRequestHtml()
 
-  return result
+    if (!(await this.testSession())) {
+      log('info', 'Found no correct session, logging in...')
+      await this.authenticate(fields.login, fields.password)
+      log('info', 'Successfully logged in')
+    }
+
+    const bills = this.formatBills(await this.fetchBills())
+
+    await this.saveBills(bills, fields.folderPath, {
+      requestInstance: this.requestHtml,
+      identifiers: ['fnac']
+    })
+  }
+
+  initRequestHtml() {
+    this.requestHtml = this.requestFactory({
+      // debug: true,
+      cheerio: true,
+      json: false,
+      headers
+    })
+  }
+
+  formatBills(bills) {
+    const VENDOR = 'Fnac'
+    return bills.map(bill => ({
+      ...bill,
+      vendor: VENDOR,
+      currency: '€',
+      filename: `${utils.formatDate(bill.date)}_${VENDOR}_${bill.amount.toFixed(
+        2
+      )}€_${bill.vendorRef}.pdf`,
+      metadata: {
+        importDate: new Date(),
+        version: 1
+      }
+    }))
+  }
+
+  async fetchBills() {
+    let result = []
+    for (const dateRangeType of [3, 4, 5, 6]) {
+      const $ = await this.requestHtml(
+        `https://secure.fnac.com/MyAccount/Order/GetOrders?DateRangeType=${dateRangeType}&OrderType=0`
+      )
+
+      const bills = scrape(
+        $,
+        {
+          vendorRef: {
+            sel: 'div',
+            fn: $el => $el.closest('section').data('order-id')
+          },
+          date: {
+            sel: '.ma-OrderTop>div>div>span:nth-child(1)',
+            parse: date => moment(date, 'DD/MM/YYYY').toDate()
+          },
+          amount: {
+            sel: '.ma-orderdetails-price, .ma-OrderDetails-price',
+            parse: normalizePrice
+          },
+          fileurl: {
+            sel: ".ma-OrderDetails-Link[href^='javascript']",
+            attr: 'href',
+            parse: href => href && href.match(/(https.*)'\)$/)[1]
+          }
+        },
+        '.ma-Order'
+      )
+
+      result = result.concat(bills)
+    }
+
+    result = result.filter(bill => bill.fileurl)
+
+    return result
+  }
+
+  // Cookie .AUTH and cookie UID seems mandatory to be connected
+  async authenticate(username, password) {
+    // Prefecth Oauth URL and token
+    let firstOauthUrl = ''
+    try {
+      await this.request({
+        followRedirect: false,
+        uri: 'https://secure.fnac.com/identity/gateway/signin',
+        followAllRedirects: false
+      })
+    } catch (err) {
+      if (err.statusCode === 302) {
+        firstOauthUrl = err.response.headers.location
+      } else {
+        throw err
+      }
+    }
+    // Finish to follow 302
+    await this.request(firstOauthUrl)
+
+    const authorize_request_identifier = this._jar
+      .getCookies('https://secure.fnac.com')
+      .find(cookie => cookie.key === 'authorize_request_identifier').value
+    log('debug', 'First login step ok, get authorize_request_identifier')
+
+    // First POST to API to get an OpenID token
+    try {
+      const reqPostApi = await this.request({
+        url: 'https://secure.fnac.com/identity/server/api/v1/login',
+        method: 'POST',
+        headers: {
+          authorization: 'Basic 23A17F49D34DE16BC85AB395F'
+        },
+        form: {
+          authenticationLocation: 'StandardCreation - Account',
+          authorizeRequestIdentifier: authorize_request_identifier,
+          email: username,
+          password: password,
+          redirectUri: firstOauthUrl
+        }
+      })
+      const OAuthUrl = reqPostApi.RedirectUri
+      log('info', 'Account seems valid')
+      log('debug', 'Second login step ok, get an Oauth link')
+      // Do a Oauth process with signin (GET then POST)
+      await this.signin({
+        url: OAuthUrl,
+        requestInstance: this.requestHtml,
+        formSelector: 'form'
+      })
+      log('debug', 'Third login step ok, logged back to fnac.com')
+    } catch (err) {
+      log('error', err.message)
+      throw new Error(errors.LOGIN_FAILED)
+    }
+  }
 }
 
 // convert a price string to a float
@@ -170,3 +185,12 @@ function normalizePrice(price) {
       .trim()
   )
 }
+
+const connector = new FnacConnector({
+  // debug: true,
+  cheerio: false,
+  json: true,
+  headers
+})
+
+connector.run()
