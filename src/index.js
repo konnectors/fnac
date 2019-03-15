@@ -13,7 +13,7 @@ const moment = require('moment')
 
 const headers = {
   'User-Agent':
-    'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:65.0) Gecko/20100101 Firefox/65.0 Cozycloud',
+    'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:65.0) Gecko/20100101 Firefox/65.0',
   'Accept-Language': 'fr,fr-FR;q=0.8,en-US;q=0.5,en;q=0.3'
 }
 
@@ -127,20 +127,29 @@ class FnacConnector extends CookieKonnector {
     // Prefecth Oauth URL and token
     let firstOauthUrl = ''
     try {
-      await this.request({
+      await this.requestHtml({
         followRedirect: false,
-        uri: 'https://secure.fnac.com/identity/gateway/signin',
-        followAllRedirects: false
+        uri:
+          'https://secure.fnac.com/identity/gateway/signin?LogonType=StandardCreation&PageRedir=https://www.fnac.com/',
+        followAllRedirects: false,
+        resolveWithFullResponse: true
       })
     } catch (err) {
       if (err.statusCode === 302) {
         firstOauthUrl = err.response.headers.location
+      } else if (err.statusCode === 403) {
+        log('error', err.message)
+        log('error', 'captcha url')
+        const captchaUrl = JSON.parse(err.message.match(/({.*})/)[1]).url
+        const captchaPage = await this.requestHtml(captchaUrl)
+        log('error', captchaPage.html())
+        throw new Error(errors.CAPTCHA_RESOLUTION_FAILED)
       } else {
         throw err
       }
     }
     // Finish to follow 302
-    await this.request(firstOauthUrl)
+    await this.requestHtml(firstOauthUrl)
 
     const authorize_request_identifier = this._jar
       .getCookies('https://secure.fnac.com')
@@ -153,9 +162,10 @@ class FnacConnector extends CookieKonnector {
         url: 'https://secure.fnac.com/identity/server/api/v1/login',
         method: 'POST',
         headers: {
-          authorization: 'Basic 23A17F49D34DE16BC85AB395F'
+          authorization: 'Basic 23A17F49D34DE16BC85AB395F',
+          accept: '*/*'
         },
-        form: {
+        body: {
           authenticationLocation: 'StandardCreation - Account',
           authorizeRequestIdentifier: authorize_request_identifier,
           email: username,
@@ -191,7 +201,10 @@ function normalizePrice(price) {
 }
 
 const connector = new FnacConnector({
-  // debug: true,
+  // debug: ({ strings: { headers, oneline } }) => {
+  //   log('info', oneline)
+  //   log('info', headers)
+  // },
   cheerio: false,
   json: true,
   headers
