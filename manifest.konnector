@@ -50,8 +50,8 @@
   "langs": ["fr", "en"],
   "locales": {
     "fr": {
-      "short_description": "Récupère vos factures fnac",
-      "long_description": "Récupère vos factures fnac",
+      "short_description": "Récupère vos factures",
+      "long_description": "Récupère vos factures Fnac.com",
       "permissions": {
         "bank operations": {
           "description": "Utilisé pour relier les factures à des operations bancaires"
@@ -68,8 +68,8 @@
       }
     },
     "en": {
-      "short_description": "Fetch your fnac bills",
-      "long_description": "Fetch your fnac bills",
+      "short_description": "Fetch your bills",
+      "long_description": "Fetch your bills from Fnac.com",
       "permissions": {
         "bank operations": {
           "description": "Required to link bank operations to bills"
