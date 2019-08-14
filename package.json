@@ -18,18 +18,22 @@
   "eslintIgnore": [
     "build"
   ],
+  "husky": {
+    "hooks": {
+      "pre-commit": "yarn lint"
+    }
+  },
   "scripts": {
     "start": "node ./src/index.js",
-    "dev": "cozy-run-dev",
-    "standalone": "cozy-run-standalone",
+    "dev": "cozy-konnector-dev",
+    "standalone": "cozy-konnector-standalone",
     "pretest": "npm run clean",
     "test": "konitor testit .",
     "check": "konitor check .",
     "clean": "rm -rf ./data",
     "build": "webpack",
-    "precommit": "yarn lint",
     "lint": "eslint --fix .",
-    "deploy": "git-directory-deploy --directory build/ --branch ${DEPLOY_BRANCH:-build} --repo=${DEPLOY_REPOSITORY:-git@github.com:konnectors/cozy-konnector-template.git}",
+    "deploy": "git-directory-deploy --directory build/ --branch ${DEPLOY_BRANCH:-build} --repo=${DEPLOY_REPOSITORY:-git@github.com:konnectors/fnac.git}",
     "cozyPublish": "cozy-app-publish --token $REGISTRY_TOKEN --build-commit $(git rev-parse ${DEPLOY_BRANCH:-build})",
     "travisDeployKey": "./bin/generate_travis_deploy_key"
   },
