@@ -1,10 +1,12 @@
 language: node_js
 node_js:
-- '8'
+- '12.22.10'
 env:
   global:
-  - DEPLOY_REPOSITORY="git@github.com:konnectors/fnac.git"
+  - MATTERMOST_CHANNEL=publication
+  # REGISTRY_TOKEN(editor=cozy, app=fnac)
   - secure: CQ44ZVjPAIVRvGgMcduSAX4VmaOrzF3nrJXPFUsNQ2tMVVdaAlI1zTNkdfntqigZgz6Mpk9x+2FcA8qrkNzQ4cW0lPP9f5dBtSH1xetfpXDFKprW4bqzmhgXSXJFTOYxkChOBPmCYJr+Vv4XqDkv/dBEPdfRSgvVyd5YxHSd5HBU91rKyR+Hox7LTnhmlXleLIs11EQgp7RK+L28MBCtCqAa2niFlKKRlqupm2FSpZzxCh9qeY0wKCQzPE+QZUm4waJ1SUGKQwbzAfyOxu2O6rwzaTSknfdJoSX6AMxjRTWBC9c3VfUGM3wjVJIqMhiUj2FQhVIjiDyX/W60/q3UMC5WYzSvEDDfhnKCPwiUKSU7HvSxx9q2YP34evxKo7KPahz9zLlQZvW+GBMyI9hbMDBTALuQVVzhftsvqfrogyYhkEPviiYiVADWNxhacsbUjRA5svXnZvtmCPo7fLFwel/krgC5Z8AwAY0YxWjSHNVScUkieSDCrlxrC09vTtG60unt9gtXbD5ruUkDLWSUwHBv2p0WY1TdP+2Vlf3yYfBvEVbqi59AxG+T17bq7Xv3QZnkrwC+UOCNCeg+gHPv+fRpUaYWzCO4uaoY/nlJa7RulQFhGca3A//6xRo/KgWw9JJnOXJelNjE9oHCUu9xShotUZKOF+O93V/BRqs9ITo=
+  # MATTERMOST_HOOK_URL
   - secure: eJSmNze4OuJ4XLd40Qzjlk4zRK/7IyC/NuI/icGfaOyYZYhu/hKP7cRZRuM5KH5vyNqDSpMTGfzvIYMYnGIw50gYwysWhLqTOr84vmsv3YuJ2IyVV+2fHRP2QO8D2O7G5FvXKjZWEeyIUJg6LAMiPJdK26sBPC4k/M37VHqzL3lXpEokeVCVG0tNgjOvCj71H/b6ylM8/AbQnmRY+h2J8bk5m7jCoIvv/7wiqgxdhvAjx02ZuAxmTd3Hib0h0jqx8Inc1LvDvQ6nWaEB9x3mMSWgp9WJzxylGxb1i6fd5opseAei3IsYk8XGU6mBQ8ufQglO2xN4WAL0/fQ8wU4EaGQLUq9pIXEyzM7nZZ+4c4szSSOn18W6dmK4NBI6qoz8tgZXDdRukTvBVVAyyTvVqglAJTtZTn3dqOvdPYAaJ3wRS33m+k3oD250+gA3Pcvvs8VsGKxJzXL3gyjTgj9h4pHznf4IEmxJ4aeIgyTa0JzhMkP3rHel/+8uLSY7tMOmTE3M65W0VgdMmZliTPWCbHvrZnHPffg79tUCnpz55uo2AKEgLwLvrl30xuVRMxrj4Xbdr56n/NEJ9J1E5p+4PV4kqVVAGOdKTS9UMPX+SEQze/x6PCaJPayR47tP6hKXe6/hrXiLTubns6xWCdj9KnYfDk5KVbma9MsfHIr7IEA=
 cache:
   yarn: true
@@ -25,7 +27,7 @@ deploy:
     branch: master
 - provider: script
   skip-cleanup: true
-  script: DEPLOY_BRANCH=build yarn deploy && yarn cozyPublish
+  script: DEPLOY_BRANCH=build yarn deploy && yarn cozyPublish --postpublish mattermost
   on:
     tags: true
 before_install:
